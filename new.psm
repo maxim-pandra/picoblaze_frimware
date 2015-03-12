@@ -15,7 +15,7 @@
 ; *\navConst Constants - Navigator entry
 ; ****************************************************************************************************************
 	StartSymbol EQU 0xFD
-	StopSymbol EQU 0xFE
+	StopSymbol  EQU 0xFE
 	ShiftSymbol EQU 0xFF
 	OKReplyCode EQU 0xDA
 	emptyComm   EQU	0xDB		
@@ -27,6 +27,9 @@
 ; *\navConst SysComm - Navigator entry
 ; ****************************************************************************************************************
 
+	DoSPIExchComm	EQU 0x05 ;transmits all data to SPI & sends reply
+	WriteFlashComm 	EQU 0x06 ;transmits data qty (2 bytes), PROGRAM instruction, start address(3 bytes) then data to write into the memory
+	ReadFlashComm 	EQU 0x07 ;transmits start address (3 bytes) and data quantity (1 byte)
 	SetWindowFlagComm	EQU 0x0A
 	SetWindowStopComm	EQU 0x0B	
 	SetWindowStartComm	EQU 0x0C
@@ -58,7 +61,7 @@
         RecvFlag 	EQU 0x40
 	AddrFlag 	EQU 0x20
         DebugModeFlag 	EQU 0x04
-        SPIProgFlag     EQU 0x02;09
+        SPIProgFlag     EQU 0x02
         BroadcFlag 	EQU 0x01
 
 ; ****************************************************************************************************************
@@ -89,6 +92,9 @@
 	SetWindowStopMSB	EQU 0xFC
 	SetWindowStopLSB	EQU 0xFD
 	SetWindowFlag		EQU 0xFE
+	
+	SPIWrite		EQU 0xE0
+	SPIRead			EQU 0xE1	
 							
    	EINT          
 	mainLoop:                JUMP     mainLoop
