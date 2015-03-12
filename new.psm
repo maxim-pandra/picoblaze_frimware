@@ -21,7 +21,7 @@
 	emptyComm   EQU	0xDB		
         MaxRecvData EQU 0x20
         NodeAddress EQU 0x01		;Ram location
-        MaxParamQty EQU 0x16
+        MaxParamQty EQU 0x16		;temp
         
 ; ****************************************************************************************************************
 ; *\navConst SysComm - Navigator entry
