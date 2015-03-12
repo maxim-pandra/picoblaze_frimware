@@ -1,0 +1,388 @@
+; ****************************************************************************************************************
+; *Required project settings
+; ****************************************************************************************************************
+; 1) Memory bank count = 1
+; 2) Memory bank size  = 1024
+; 3) Interrupt vector  = 1023
+;F0 => reading from FTDI 
+;F1 => writing to FTDI
+;F2 => present for UARTstate
+;F3 => load first0 address to read in BRAM module
+;F4 => reading from BRAM with auto increment
+;F5 => load first1 addres to read in BRAM module
+
+; ****************************************************************************************************************
+; *\navConst Constants - Navigator entry
+; ****************************************************************************************************************
+	StartSymbol EQU 0xFD
+	StopSymbol EQU 0xFE
+	ShiftSymbol EQU 0xFF
+	OKReplyCode EQU 0xDA
+	emptyComm   EQU	0xDB		
+        MaxRecvData EQU 0x20
+        NodeAddress EQU 0x01		;Ram location
+        MaxParamQty EQU 0x16
+        
+; ****************************************************************************************************************
+; *\navConst SysComm - Navigator entry
+; ****************************************************************************************************************
+
+	SetWindowFlagComm	EQU 0x0A
+	SetWindowStopComm	EQU 0x0B	
+	SetWindowStartComm	EQU 0x0C
+	TestComand 	EQU 0x0D
+	GetDeviceID 	EQU 0x0E           ;returnes: PCB index, Hardvare version, Software version, Serial number
+	DoEchoComm 	EQU 0x0F            ;returnes all sent data
+	GetCurrAddr	EQU 0x10
+	WriteBRAMBlk	EQU 0x11
+	ReadBRAMBlk	EQU 0x12
+	GetCurrWrAddrA  EQU 0x13
+; ****************************************************************************************************************
+; *\navConst SysErrors - Navigator entry
+; ****************************************************************************************************************
+
+	LengthMisErr	EQU 0xE0          ;data length mismatch
+	ChecksumMisErr	EQU 0xE1        ;cheksm mismatch
+	CommAbsentErr	EQU 0xE2         ;command with code recieved is absent
+	OutOfMemErr 	EQU 0xE3           ;adress goes over FF thrue writing or reading
+	TooLittleErr	EQU 0xE4          ;too little data sent
+	DataFormatErr 	EQU 0xE5         ;improper data for specified command
+        ParamAbsentErr 	EQU 0xE6        ;r,ested parameter is undefined
+        MethForbidErr 	EQU 0xE7         ;method of parameter is not available
+                           
+; ****************************************************************************************************************
+; *\navConst stateFlags - Navigator entry
+; ****************************************************************************************************************
+
+        ShiftFlag 	EQU 0x80
+        RecvFlag 	EQU 0x40
+	AddrFlag 	EQU 0x20
+        DebugModeFlag 	EQU 0x04
+        SPIProgFlag     EQU 0x02;09
+        BroadcFlag 	EQU 0x01
+
+; ****************************************************************************************************************
+; *\navHw registers - Navigator entry
+; ****************************************************************************************************************
+        
+	TransmCounter 	EQU sE
+	RecvCounter 	EQU sD
+	CheckSumReg 	EQU sC
+	NodeState 	EQU sF
+
+; ****************************************************************************************************************
+; *\navConst ioPorts - Navigator entry
+; ****************************************************************************************************************
+
+	UARTDataIn 		EQU 0xF0
+	UARTDataOut 		EQU 0xF1
+	UARTState 		EQU 0xF2             ;bit0-RX full,1-RX half full,2-RX data present,4-TX full,5-TX half full,7-SPI transmission done
+	BRAMSetStartAddrLSB 	EQU 0xF3
+	BRAMSetStartAddrMSB 	EQU 0xF5
+	BRAMRdWrWinc 		EQU 0xF4
+	ReadCurrWAddr0 		EQU 0xF6  ;this is port B (BRAM)
+	ReadCurrWAddr1 		EQU 0xF7  ;this is port B (BRAM)
+	ReadCurrWrLSB		EQU 0xF8  ;this is port A (BRAM)
+	ReadCurrWrMSB		EQU 0xF9  ;this is port A (BRAM)
+	SetWindowStartMSB	EQU 0xFA
+	SetWindowStartLSB	EQU 0xFB
+	SetWindowStopMSB	EQU 0xFC
+	SetWindowStopLSB	EQU 0xFD
+	SetWindowFlag		EQU 0xFE
+							
+   	EINT          
+	mainLoop:                JUMP     mainLoop
+; ################################################################################################################
+; ################################################################################################################
+; ################################################################################################################
+; \navGrpBegin IRQ - Opens group entry in the navigator 
+; ****************************************************************************************************************
+; *Reciving something from Pc
+; ****************************************************************************************************************
+UART_IRQ: 
+		   	    OUT s0, UARTDataIn
+                            LOAD s0, s0                        ;nope
+                            IN s0, UARTDataIn
+                            COMP s0, StartSymbol
+                            JUMP NZ, UART_IRQ_0                ; not a start symbol
+;                            AND NodeState, DebugModeFlag
+                            OR NodeState, RecvFlag
+                            LOAD RecvCounter, 0x00
+                            RET 
+UART_IRQ_0: 
+                            TEST NodeState, RecvFlag
+                            RET Z
+                            COMP s0, ShiftSymbol
+                            JUMP Z, UART_IRQ_SHIFT
+                            COMP s0, StopSymbol
+                            JUMP Z, UART_IRQ_Decode
+                            TEST NodeState, ShiftFlag
+                            JUMP Z, UART_IRQ_1
+			    AND NodeState, 0x7F                            
+                            ADD s0, StartSymbol                ;previous symbol was ShiftSymbol
+                                             ; F7 = FF - ShiftFlag
+UART_IRQ_1: 
+                            TEST NodeState, AddrFlag           
+                            JUMP NZ, UART_IRQ_3
+                            TEST RecvCounter, 0xFF
+                            JUMP NZ, UART_IRQ_Terminate
+                            COMP s0, NodeAddress
+                            JUMP Z, UART_IRQ_2
+                            COMP s0, 0x00
+                            JUMP Z, UART_IRQ_2
+ ;                           AND NodeState, DebugModeFlag
+			    AND NodeState, 0xBF ;0xFF-RecvFlag			    
+                            RET 
+;UART_IRQ_11: 
+;                            OR NodeState, BroadcFlag           ;global node addressing (seems that it means something.. but what?) may be comand to describing errors
+UART_IRQ_2: 
+                            OR NodeState, AddrFlag
+                            LOAD CheckSumReg, s0
+                            RET 
+UART_IRQ_3: 
+                            XOR CheckSumReg, s0                ;something wrong with all that checkSum thing (why do we start checking only if strang constant EQUels receved byte
+                            COMP RecvCounter, MaxRecvData
+                            JUMP NC, UART_IRQ_Over
+                            STORE s0, (RecvCounter)
+                            ADD RecvCounter, 0x01
+                            RET 
+UART_IRQ_Over: 
+                            LOAD s3, LengthMisErr
+                            JUMP UART_IRQ_Error                ;31 symbols are recieved - too long message
+UART_IRQ_SHIFT: 
+                            OR NodeState, ShiftFlag
+                            RET 
+UART_IRQ_Terminate: 
+                            RET 
+UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
+			    TEST NodeState, AddrFlag		;cheking "address correct"
+			    JUMP Z, UART_IRQ_Terminate     
+                            TEST CheckSumReg, 0xFF
+                            LOAD s3, ChecksumMisErr
+                            JUMP NZ, UART_IRQ_Error            ;checksum mismatch
+                            LOAD s3, LengthMisErr
+                            FETCH s0, 0x00                       ;command code, s1,s2-full data qty (with command & checksum)
+			    COMP s0, SetWindowStartComm
+			    JUMP Z, SetWindowStartProc
+			    COMP s0, SetWindowStopComm
+			    JUMP Z, SetWindowStopProc
+			    COMP s0, SetWindowFlagComm
+			    JUMP Z, SetWindowFlagProc
+                            COMP s0, GetDeviceID
+                            JUMP Z, DoGetDeviceID
+                            COMP s0, DoEchoComm
+                            JUMP Z, DoEchoProc
+                            COMP s0, TestComand
+                            JUMP Z, TestComandDo
+                            COMP s0, GetCurrAddr
+                            JUMP Z, GetCurrAddr
+                            COMP s0, GetCurrWrAddrA
+                            JUMP Z, GetCurrWrAddrADo
+                            COMP s0, WriteBRAMBlk
+                            JUMP Z, WriteBRAMBlk
+                            COMP s0, ReadBRAMBlk
+                            JUMP Z, ReadBRAMBlk
+                            LOAD s3, CommAbsentErr             ;command not found
+UART_IRQ_Error:
+			    LOAD s4, StartSymbol
+			    OUT s4,UARTDataOut
+			    LOAD s0, s0   ;wait for 150ns
+			    LOAD s0, s0
+			    LOAD s0, s0
+UART_IRQ_Error_0:
+			    IN s4, UARTState
+                            TEST s4, 0x01
+                            JUMP NZ, UART_IRQ_Error_0
+			    OUT s3, UARTDataOut
+			    LOAD s0, s0			    
+			    LOAD s0, s0
+			    LOAD s0, s0
+			    
+UART_IRQ_Error_1: 
+                            IN s4, UARTState
+                            TEST s4, 0x01
+                            JUMP NZ, UART_IRQ_Error_1
+                            OUT s3, UARTDataOut
+                            LOAD s3, StopSymbol
+                            LOAD s0, s0
+                            LOAD s0, s0
+			    
+UART_IRQ_Error_2: 
+                            IN s4, UARTState
+                            TEST s4, 0x01
+                            JUMP NZ, UART_IRQ_Error_2                            
+                            OUT s3, UARTDataOut
+                            AND NodeState, DebugModeFlag
+                            RET 
+; \navGrpEnd
+TestComandDo: 
+			    JUMP mainLoop
+; i wanna simplify this send sybol procedure and strip out transmCounter and strange dellay thing, you can see them comented
+; the broadcast flag also goes to coments
+; --------------------------start-simplifying-SendSymbolProc---------------------------------------
+EndDataTrans: ;cheksum & stop symbol transmission  ++
+;                            TEST NodeState, BroadcFlag
+;                            RETURN NZ
+                            LOAD s3, CheckSumReg
+                            CALL SendSymbolProc
+	EndDataTrans_0: 
+                            LOAD s3, StopSymbol
+	EndDataTrans_1: 
+                            IN s4, UARTState
+                            TEST s4, 0x01
+                            JUMP NZ, EndDataTrans_1
+                            OUT s3, UARTDataOut
+                            AND NodeState, DebugModeFlag
+                            RET 
+
+SendSymbolProc: ;data INPUT s3  ++
+                            XOR CheckSumReg, s3
+                            COMP s3, StartSymbol
+                            JUMP C, SendSymbolProc_1           ;no shift rEQUired
+                            LOAD s5, s3
+                            SUB s5, StartSymbol
+                            LOAD s3, ShiftSymbol
+	SendSymbolProc_1: 
+                            IN s4, UARTState
+                            TEST s4, 0x01
+                            JUMP NZ, SendSymbolProc_1          ;buffer full, waiting
+                            OUT s3, UARTDataOut
+			    COMP s3, ShiftSymbol
+                            RET NZ
+                            LOAD s3, s5
+                            JUMP SendSymbolProc_1              ;after shift symbol
+
+StartUARTTransmission: 
+                            LOAD CheckSumReg, 0x00
+                            LOAD TransmCounter, 00
+                            LOAD s3, StartSymbol
+                            OUT s3, UARTDataOut
+                            RET 
+; -------------------------------end-simplifying-SendSymbolProc-------------------------------
+DoGetDeviceID:
+                            CALL StartUARTTransmission
+                            LOAD s0, 0x04
+	DoGetDeviceID_1: 
+                            LOAD s3, 0x08
+                            CALL SendSymbolProc
+                            SUB s0, 0x01
+                            JUMP NZ, DoGetDeviceID_1
+                            JUMP EndDataTrans
+DoEchoProc: ;;DEBUG++
+                            CALL StartUARTTransmission
+                            LOAD s0, 0x00
+                            SUB RecvCounter, 0x01
+	DoEchoProc_1: 
+                            FETCH s3, (s0)
+                            CALL SendSymbolProc
+                            ADD s0, 0x01
+                            SUB RecvCounter, 0x01
+                            JUMP NZ, DoEchoProc_1
+                            JUMP EndDataTrans
+; \navGrpBegin WriteBRAMBlk - Opens group entry in the navigator 
+
+WriteBRAMBlk: 		;i want to add here length test
+                            ;COMP RecvCounter,0x  
+                            ;JUMP NZ, UART_IRQ_Error
+                            FETCH s0, 0x01                       ;address
+                            FETCH s1, 0x02                       ;[3FFF;2000]
+                            OUT s0, BRAMSetStartAddrMSB
+                            OUT s1, BRAMSetStartAddrLSB                          
+                            FETCH s0, 0x03
+                            LOAD s3, 0x03			;blk lenght
+WriteBRAMBlk_1: 
+			    ADD s3, 0x01
+			    FETCH s1, (s3)
+                            OUT s1, BRAMRdWrWinc
+                            SUB s0, 0x01
+                            JUMP NZ, WriteBRAMBlk_1 
+                            ;CALL StartUARTTransmission 
+                      	    LOAD s3, OKReplyCode
+                      	    ;CALL SendSymbolProc
+                      	    ;CALL EndDataTrans
+                      	    ;RET
+                            JUMP UART_IRQ_Error
+                            ; \navGrpEnd 
+                               
+; \navGrpBegin ReadBRAMBlk
+ReadBRAMBlk:
+			COMP RecvCounter, 0x06
+			JUMP NZ, UART_IRQ_Error
+			FETCH s0, 0x01                       ;address
+                        FETCH s1, 0x02                       ;[3FFF;2000]
+                        OUT s0, BRAMSetStartAddrMSB
+                        OUT s1, BRAMSetStartAddrLSB
+                        CALL StartUARTTransmission
+			IN s3, BRAMRdWrWinc		;force tic for address counter     
+                        FETCH s0, 0x03
+                        FETCH s8, 0x04
+                        CALL SendSymbolProc  ; this line is for the first byte to be memorized
+ReadBRAMBlk_1:		
+			IN s3, BRAMRdWrWinc
+			CALL SendSymbolProc
+			SUB s8, 0x01
+			SUBC s0, 0x00
+                        JUMP NZ, ReadBRAMBlk_1          ;not all data bytes was sent
+                        JUMP EndDataTrans
+			; \navGrpEnd		                   
+
+GetCurrAddr:
+			IN s1, ReadCurrWAddr0
+			IN s0, ReadCurrWAddr1
+			CALL StartUARTTransmission
+			LOAD s3, s0
+			CALL SendSymbolProc
+			LOAD s3, s1
+			CALL SendSymbolProc
+			JUMP EndDataTrans
+			
+GetCurrWrAddrADo:
+			IN s1, ReadCurrWrLSB
+			IN s0, ReadCurrWrMSB
+			CALL StartUARTTransmission
+			LOAD s3,s0
+			CALL SendSymbolProc
+			LOAD s3,s1
+			CALL SendSymbolProc
+			JUMP EndDataTrans
+
+SetWindowStartProc:
+			COMP RecvCounter, 0x04
+			JUMP NZ, UART_IRQ_Error
+			FETCH s0, 0x01                       ;marginStart
+                        FETCH s1, 0x02                       ;[0x0000;0xFFFF]
+                        OUT s0, SetWindowStartMSB
+                        OUT s1, SetWindowStartLSB
+                        LOAD s3, OKReplyCode
+                        JUMP UART_IRQ_Error
+
+SetWindowStopProc:
+			COMP RecvCounter, 0x04
+			JUMP NZ, UART_IRQ_Error
+			FETCH s0, 0x01                       ;marginStop
+                        FETCH s1, 0x02                       ;[0x0000;0xFFFF]
+                        OUT s0, SetWindowStopMSB
+                        OUT s1, SetWindowStopLSB
+                        LOAD s3, OKReplyCode
+                        JUMP UART_IRQ_Error
+
+
+SetWindowFlagProc:
+			COMP RecvCounter, 0x03
+			JUMP NZ, UART_IRQ_Error
+			FETCH s0, 0x01
+			OUT s0, SetWindowFlag
+			LOAD s3, OKReplyCode
+			JUMP UART_IRQ_Error			
+         
+                            
+; ################################################################################################################
+;*****************************************************************************************************************
+;*Interrupt service routine                                                                   
+;*****************************************************************************************************************
+isr:
+			CALL UART_IRQ
+		        RETI    ENABLE
+ 			ORG     0x3FF
+			JUMP    isr
+; ################################################################################################################
