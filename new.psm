@@ -230,6 +230,11 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		JUMP	Z, WriteBRAMBlk
 		COMP	s0, ReadBRAMBlk
 		JUMP	Z, ReadBRAMBlk
+		comp	s0,DoSPIExchComm
+		jump	Z,DoSPIExchProc
+		comp	s0,ReadFlashComm
+	 	jump	Z,ReadFlashProc
+
 		
 		LOAD	s3, CommAbsentErr             ;command not found
 UART_IRQ_Error:
@@ -270,7 +275,7 @@ TestComandDo:
 ; the broadcast flag also goes to coments
 ; --------------------------start-simplifying-SendSymbolProc---------------------------------------
 EndDataTrans: ;cheksum & stop symbol transmission  ++
-;                            TEST NodeState, BroadcFlag
+;           	                 TEST NodeState, BroadcFlag
 ;                            RETURN NZ
 	LOAD s3, CheckSumReg
 	CALL SendSymbolProc
@@ -328,8 +333,64 @@ DoEchoProc: ;;DEBUG++
 		SUB RecvCounter, 0x01
 		JUMP NZ, DoEchoProc_1
 		JUMP EndDataTrans
-; \navGrpBegin WriteBRAMBlk - Opens group entry in the navigator 
+		
+; \navGrpBegin SPI - Opens group entry in the navigator 
+DoSPIExchProc:					;++
+	comp	RecvCounter,3
+	jump	C,UART_IRQ_Error
+	call	StartUARTTransmission
+	load	s0,1		;address of first data byte	
+	sub	RecvCounter,2		;pure data qty (-command & checksum)
+	load	s3,0
+	out	s3,SPISlaveSelect	 ;slave select on
+	DoSPIExchProc_1:
+		fetch	s3,s0
+		call	ExchangeSPIByte
+		call	SendSymbolProc
+		add	s0,1
+		sub	RecvCounter,1
+		jump	NZ,DoSPIExchProc_1
+		load	s3,1
+		out	s3,SPISlaveSelect	 ;slave select off
+		jump	EndDataTrans	
+  
+ReadFlashProc:
+	test	NodeState,BroadcFlag
+	ret	NZ
+	comp	RecvCounter,6
+	jump	NZ,UART_IRQ_Error
+	load	s3,0
+	out	s3,SPISlaveSelect	 ;slave select on
+	load	s3,FSPI_RDDAT
+	call	ExchangeSPIByte	 ;command
+	fetch	s3,1
+	call	ExchangeSPIByte
+	fetch	s3,2
+	call	ExchangeSPIByte
+	fetch	s3,3
+	call	ExchangeSPIByte	 ;address
+	call	StartUARTTransmission
+	fetch	s0,4		  	 ;byte count
+	ReadFlashProc_1:
+		call	ExchangeSPIByte
+		call	SendSymbolProc
+		sub	s0,1
+		jump	NZ,ReadFlashProc_1
+		load	s3,1
+		out	s3,SPISlaveSelect	 ;slave select off
+		jump	EndDataTrans
 
+ExchangeSPIByte:  ;byte to send in s3
+	out	s3,SPIWrite
+	ExchangeSPIByte_1:
+		in	s4,UARTState
+		test	s4,$40
+		jump	Z,ExchangeSPIByte_1 ;waiting for SPI ready
+		in	s3,SPIRead
+		ret
+; \navGrpEnd
+
+; \navGrpBegin WriteBRAMBlk - Opens group entry in the navigator 
 WriteBRAMBlk: 		;i want to add here length test
 	;COMP RecvCounter,0x  
 	;JUMP NZ, UART_IRQ_Error
