@@ -94,7 +94,8 @@
 	SetWindowFlag		EQU 0xFE
 	
 	SPIWrite		EQU 0xE0
-	SPIRead			EQU 0xE1	
+	SPIRead			EQU 0xE1
+	SPISlaveSelect		EQU 0xE2	
 				
 							
    	EINT          
@@ -140,53 +141,97 @@ UART_IRQ_1:
 	AND NodeState, 0x00
 	RET 
 UART_IRQ_2: 
-	OR NodeState, AddrFlag
-	LOAD CheckSumReg, s0
+	OR	NodeState, AddrFlag
+	LOAD	CheckSumReg, s0
 	RET 
 UART_IRQ_3: 
-	XOR CheckSumReg, s0                ;something wrong with all that checkSum thing (why do we start checking only if strang constant EQUels receved byte
-	COMP RecvCounter, MaxRecvData
-	JUMP NC, UART_IRQ_Over
-	STORE s0, (RecvCounter)
-	ADD RecvCounter, 0x01
-	RET 
+	XOR 	CheckSumReg, s0                ;something wrong with all that checkSum thing (why do we start checking only if strang constant EQUels receved byte
+	test	NodeState,SPIProgFlag
+	jump	Z,UART_IRQ_6
+	comp	RecvCounter,0		   ;start of WriteFlashComm implementation
+	jump	NZ,UART_IRQ_4
+	load	sA,s0
+	add	RecvCounter,1	
+	ret
+	UART_IRQ_4:
+	comp	RecvCounter,1
+	jump	NZ,UART_IRQ_5	
+	load	sB,s0
+	add	RecvCounter,1
+	load	s3,0
+	out	s3,SPISlaveSelect	 ;slave select on
+	ret
+	UART_IRQ_5:
+	test	sA,$FF
+	jump	NZ,UART_IRQ_Flash
+	test	sB,$FF	
+	ret	Z
+	UART_IRQ_Flash:
+	sub	sA,1		
+	subc	sB,0
+	out	s0,SPIWrite	;sending data directly to SPI
+	ret
+	UART_IRQ_6:	  		 ;end of WriteFlashComm implementation
+	test	RecvCounter,$FF
+	jump	NZ,UART_IRQ_7
+	comp	s0,WriteFlashComm
+	jump	NZ,UART_IRQ_7
+	or 	NodeState,SPIProgFlag
+	ret	
+UART_IRQ_7:
+	COMP	RecvCounter, MaxRecvData
+	JUMP	NC, UART_IRQ_Over
+	STORE	s0, (RecvCounter)
+	ADD	RecvCounter, 0x01
+	RET 	
 UART_IRQ_Over: 
-	LOAD s3, LengthMisErr
-	JUMP UART_IRQ_Error                ;31 symbols are recieved - too long message
+	LOAD	s3, LengthMisErr
+	JUMP	UART_IRQ_Error                ;31 symbols are recieved - too long message
 UART_IRQ_SHIFT: 
-	OR NodeState, ShiftFlag
+	OR 	NodeState, ShiftFlag
 	RET 
 UART_IRQ_Terminate: 
+	AND NodeState, 0x00
+	load s0,1
+	OUT s0, SPISlaveSelect	
 	RET 
 UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
-	TEST NodeState, AddrFlag		;cheking "address correct"
-	JUMP Z, UART_IRQ_Terminate     
-	TEST CheckSumReg, 0xFF
-	LOAD s3, ChecksumMisErr
-	JUMP NZ, UART_IRQ_Error            ;checksum mismatch
-	LOAD s3, LengthMisErr
-	FETCH s0, 0x00                       ;command code, s1,s2-full data qty (with command & checksum)
-	COMP s0, SetWindowStartComm
-	JUMP Z, SetWindowStartProc
-	COMP s0, SetWindowStopComm
-	JUMP Z, SetWindowStopProc
-	COMP s0, SetWindowFlagComm
-	JUMP Z, SetWindowFlagProc
-	COMP s0, GetDeviceID
-	JUMP Z, DoGetDeviceID
-	COMP s0, DoEchoComm
-	JUMP Z, DoEchoProc
-	COMP s0, TestComand
-	JUMP Z, TestComandDo
-	COMP s0, GetCurrAddr
-	JUMP Z, GetCurrAddr
-	COMP s0, GetCurrWrAddrA
-	JUMP Z, GetCurrWrAddrADo
-	COMP s0, WriteBRAMBlk
-	JUMP Z, WriteBRAMBlk
-	COMP s0, ReadBRAMBlk
-	JUMP Z, ReadBRAMBlk
-	LOAD s3, CommAbsentErr             ;command not found
+	LOAD	s3, 1
+	OUT	s3, SPISlaveSelect
+;	TEST	NodeState, AddrFlag		;cheking "address correct"
+;	JUMP	Z, UART_IRQ_Terminate     
+	TEST	CheckSumReg, 0xFF
+	LOAD	s3, ChecksumMisErr
+	JUMP	NZ, UART_IRQ_Error            ;checksum mismatch
+	test	NodeState, SPIProgFlag
+	JUMP	Z, UART_IRQ_Decode_1
+	LOAD	s3, OKReplyCode
+	JUMP	UART_IRQ_Error
+	UART_IRQ_Decode_1:
+		LOAD	s3,LengthMisErr
+		FETCH	s0,0x00                       ;command code, s1,s2-full data qty (with command & checksum)
+		COMP	s0, SetWindowStartComm
+		JUMP	Z, SetWindowStartProc
+		COMP	s0, SetWindowStopComm
+		JUMP	Z, SetWindowStopProc
+		COMP	s0, SetWindowFlagComm
+		JUMP	Z, SetWindowFlagProc
+		COMP	s0, GetDeviceID
+		JUMP	Z, DoGetDeviceID
+		COMP	s0, DoEchoComm
+		JUMP	Z, DoEchoProc
+		COMP	s0, TestComand
+		JUMP	Z, TestComandDo
+		COMP	s0, GetCurrAddr
+		JUMP	Z, GetCurrAddr
+		COMP	s0, GetCurrWrAddrA
+		JUMP	Z, GetCurrWrAddrADo
+		COMP	s0, WriteBRAMBlk
+		JUMP	Z, WriteBRAMBlk
+		COMP	s0, ReadBRAMBlk
+		JUMP	Z, ReadBRAMBlk
+		
+		LOAD	s3, CommAbsentErr             ;command not found
 UART_IRQ_Error:
 	LOAD s4, StartSymbol
 	OUT s4,UARTDataOut
