@@ -22,6 +22,7 @@
         MaxRecvData EQU 0x20
         NodeAddress EQU 0x01		;Ram location
         MaxParamQty EQU 0x16
+        FSPI_RDDAT  EQU 0x03
         
 ; ****************************************************************************************************************
 ; *\navConst SysComm - Navigator entry
@@ -344,7 +345,7 @@ DoSPIExchProc:					;++
 	load	s3,0
 	out	s3,SPISlaveSelect	 ;slave select on
 	DoSPIExchProc_1:
-		fetch	s3,s0
+		fetch	s3,(s0)
 		call	ExchangeSPIByte
 		call	SendSymbolProc
 		add	s0,1
