@@ -163,9 +163,9 @@ UART_IRQ_3:
 	out	s3,SPISlaveSelect	 ;slave select on
 	ret
 	UART_IRQ_5:
-	test	sA,$FF
+	test	sA,0xFF
 	jump	NZ,UART_IRQ_Flash
-	test	sB,$FF	
+	test	sB,0xFF	
 	ret	Z
 	UART_IRQ_Flash:
 	sub	sA,1		
@@ -173,7 +173,7 @@ UART_IRQ_3:
 	out	s0,SPIWrite	;sending data directly to SPI
 	ret
 	UART_IRQ_6:	  		 ;end of WriteFlashComm implementation
-	test	RecvCounter,$FF
+	test	RecvCounter,0xFF
 	jump	NZ,UART_IRQ_7
 	comp	s0,WriteFlashComm
 	jump	NZ,UART_IRQ_7
@@ -385,7 +385,7 @@ ExchangeSPIByte:  ;byte to send in s3
 	out	s3,SPIWrite
 	ExchangeSPIByte_1:
 		in	s4,UARTState
-		test	s4,$04
+		test	s4,0x40
 		jump	Z,ExchangeSPIByte_1 ;waiting for SPI ready
 		in	s3,SPIRead
 		ret
