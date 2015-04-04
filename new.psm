@@ -427,7 +427,7 @@ ReadBRAMBlk:
 	IN s3, BRAMRdWrWinc		;force tic for address counter     
 	FETCH s0, 0x03
 	FETCH s8, 0x04
-;	CALL SendSymbolProc  ; this line is for the first byte to be memorized
+	CALL SendSymbolProc  ; this line is for the first byte to be memorized
 ReadBRAMBlk_1:		
 	IN s3, BRAMRdWrWinc
 	CALL SendSymbolProc
