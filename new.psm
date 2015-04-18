@@ -41,6 +41,7 @@
 	WriteBRAMBlk	EQU 0x11
 	ReadBRAMBlk	EQU 0x12
 	GetCurrWrAddrA  EQU 0x13
+	ResetPointersComm   EQU 0x14
 ; ****************************************************************************************************************
 ; *\navConst SysErrors - Navigator entry
 ; ****************************************************************************************************************
@@ -93,6 +94,7 @@
 	SetWindowStopMSB	EQU 0xFC
 	SetWindowStopLSB	EQU 0xFD
 	SetWindowFlag		EQU 0xFE
+	ResetPointers		EQU 0xFF
 	
 	SPIWrite		EQU 0xE0
 	SPIRead			EQU 0xE1
@@ -235,6 +237,8 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		jump	Z,DoSPIExchProc
 		comp	s0,ReadFlashComm
 	 	jump	Z,ReadFlashProc
+	 	comp	s0,ResetPointers
+	 	jump	Z,ResetPointersProc
 
 		
 		LOAD	s3, CommAbsentErr             ;command not found
@@ -485,8 +489,15 @@ SetWindowFlagProc:
 	OUT s0, SetWindowFlag
 	LOAD s3, OKReplyCode
 	JUMP UART_IRQ_Error			
-         
-                            
+
+ResetPointersProc:
+	COMP RecvCounter,         
+	JUMP NZ, UART_IRQ_Error
+	FETCH s0, 0x01
+	OUT s0, ResetPointers  
+	LOAD s3, OKReply Code   
+	JUMP UART_IRQ_Error	
+	                       
 ; ################################################################################################################
 ;*****************************************************************************************************************
 ;*Interrupt service routine                                                                   
