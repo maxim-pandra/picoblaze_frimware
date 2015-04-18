@@ -491,7 +491,7 @@ SetWindowFlagProc:
 	JUMP UART_IRQ_Error			
 
 ResetPointersProc:
-	COMP RecvCounter,         
+	COMP RecvCounter, 0x03        
 	JUMP NZ, UART_IRQ_Error
 	FETCH s0, 0x01
 	OUT s0, ResetPointers  
