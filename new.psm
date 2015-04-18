@@ -237,7 +237,7 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		jump	Z,DoSPIExchProc
 		comp	s0,ReadFlashComm
 	 	jump	Z,ReadFlashProc
-	 	comp	s0,ResetPointers
+	 	comp	s0,ResetPointersComm
 	 	jump	Z,ResetPointersProc
 
 		
