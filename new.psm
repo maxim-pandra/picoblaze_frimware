@@ -389,7 +389,7 @@ ExchangeSPIByte:  ;byte to send in s3
 	out	s3,SPIWrite
 	ExchangeSPIByte_1:
 		in	s4,UARTState
-		test	s4,0x40
+		test	s4,0x04
 		jump	Z,ExchangeSPIByte_1 ;waiting for SPI ready
 		in	s3,SPIRead
 		ret
