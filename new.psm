@@ -27,7 +27,6 @@
 ; ****************************************************************************************************************
 ; *\navConst SysComm - Navigator entry
 ; ****************************************************************************************************************
-
 	DoSPIExchComm	EQU 0x05 ;transmits all data to SPI & sends reply
 	WriteFlashComm 	EQU 0x06 ;transmits data qty (2 bytes), PROGRAM instruction, start address(3 bytes) then data to write into the memory
 	ReadFlashComm 	EQU 0x07 ;transmits start address (3 bytes) and data quantity (1 byte)
@@ -341,6 +340,7 @@ DoEchoProc: ;;DEBUG++
 		
 ; \navGrpBegin SPI - Opens group entry in the navigator 
 DoSPIExchProc:					;++
+	load	s3,2
 	comp	RecvCounter,3
 	jump	C,UART_IRQ_Error
 	call	StartUARTTransmission
@@ -390,7 +390,7 @@ ExchangeSPIByte:  ;byte to send in s3
 	ExchangeSPIByte_1:
 		in	s4,UARTState
 		test	s4,0x04
-		jump	Z,ExchangeSPIByte_1 ;waiting for SPI ready
+		jump	NC,ExchangeSPIByte_1 ;waiting for SPI ready
 		in	s3,SPIRead
 		ret
 ; \navGrpEnd
