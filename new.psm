@@ -36,7 +36,7 @@
 	TestComand 	EQU 0x0D
 	GetDeviceID 	EQU 0x0E           ;returnes: PCB index, Hardvare version, Software version, Serial number
 	DoEchoComm 	EQU 0x0F            ;returnes all sent data
-	GetCurrAddr	EQU 0x10
+	GetCurrRdAddrB	EQU 0x10
 	WriteBRAMBlk	EQU 0x11
 	ReadBRAMBlk	EQU 0x12
 	GetCurrWrAddrA  EQU 0x13
@@ -84,8 +84,8 @@
 	BRAMSetStartAddrLSB 	EQU 0xF3
 	BRAMSetStartAddrMSB 	EQU 0xF5
 	BRAMRdWrWinc 		EQU 0xF4
-	ReadCurrWAddr0 		EQU 0xF6  ;this is port B (BRAM)
-	ReadCurrWAddr1 		EQU 0xF7  ;this is port B (BRAM)
+	ReadCurrRdAddr0 		EQU 0xF6  ;this is port B (BRAM)
+	ReadCurrRdAddr1 		EQU 0xF7  ;this is port B (BRAM)
 	ReadCurrWrLSB		EQU 0xF8  ;this is port A (BRAM)
 	ReadCurrWrMSB		EQU 0xF9  ;this is port A (BRAM)
 	SetWindowStartMSB	EQU 0xFA
@@ -224,8 +224,8 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		JUMP	Z, DoEchoProc
 		COMP	s0, TestComand
 		JUMP	Z, TestComandDo
-		COMP	s0, GetCurrAddr
-		JUMP	Z, GetCurrAddr
+		COMP	s0, GetCurrRdAddrB
+		JUMP	Z, GetCurrRdAddrB
 		COMP	s0, GetCurrWrAddrA
 		JUMP	Z, GetCurrWrAddrADo
 		COMP	s0, WriteBRAMBlk
@@ -441,9 +441,9 @@ ReadBRAMBlk_1:
 	JUMP EndDataTrans
 	; \navGrpEnd		                   
 
-GetCurrAddr:
-	IN s1, ReadCurrWAddr0
-	IN s0, ReadCurrWAddr1
+GetCurrRdAddrB:
+	IN s1, ReadCurrRdAddr0
+	IN s0, ReadCurrRdAddr1
 	CALL StartUARTTransmission
 	LOAD s3, s0
 	CALL SendSymbolProc
