@@ -116,7 +116,8 @@
 	AccumGetStatePort	EQU 0xE4
 	AccumRdIncPort		EQU 0xE5
 	AccumGetDataPort	EQU 0xE6
-	AccumGetCounterPort	EQU 0xE7
+	AccumGetCounterLSBPort	EQU 0xE7
+	AccumGetCounterMSBPort	EQU 0xE8
 				
 							
    	EINT          
@@ -585,13 +586,17 @@ AccumGetCounterProc:
 		TEST s0, 0x00	;clears the ZERO flag with no change to register contents
 		COMP s0, ChanelAllKey
 		JUMP Z, AccumGetCounterProc_2
-		IN s3, AccumGetCounterPort
+		IN s3, AccumGetCounterLSBPort
+		CALL SendSymbolProc
+		IN s3, AccumGetCounterMSBPort
 		CALL SendSymbolProc
 		JUMP EndDataTrans
 	
 	AccumGetCounterProc_2:
 		SUB s8, 0x01
-		IN s3, AccumGetCounterPort
+		IN s3, AccumGetCounterLSBPort
+		CALL SendSymbolProc
+		IN s3, AccumGetCounterMSBPort
 		CALL SendSymbolProc
 		JUMP NZ, AccumGetCounterProc_1	;not all data bytes were sent
 		JUMP EndDataTrans
