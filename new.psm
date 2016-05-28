@@ -28,6 +28,8 @@
 ; *\navConst HistAccum - Navigator entry
 ; ****************************************************************************************************************
         ChanelMax	0x05  ;max hist accum command types + 1
+        ChanelAmount	0x04  ;amount of channels we have + 1
+        ChanelAllKey	0x04	
         HystLengthLSB   0x00	; amount of bits in hyst + 1 for bettet loop support
         HystLengthMSB	0x0C
         
@@ -260,6 +262,8 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		jump	Z, AccumGetStateProc
 		comp	s0, AccumGetDataComm
 		jump	Z, AccumGetDataProc
+		comp	s0, AccumGetCounterComm
+		jump	Z, AccumGetCounterProc
 		LOAD	s3, CommAbsentErr             ;command not found
 UART_IRQ_Error:
 	LOAD s4, StartSymbol
@@ -556,7 +560,29 @@ AccumGetDataProc:
 		JUMP NZ, AccumGetDataProc_1          ;not all data bytes was sent
 		JUMP EndDataTrans
 
+AccumGetCounterProc:
+	COMP	RecvCounter, 0x03
+	JUMP	NZ,UART_IRQ_Error
+	FETCH	s0, 0x01
+	AND s0, 0xFF	;clears the CARRY flag with no change to register contents		
+	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
+	JUMP C, DataFormatErr
+	OUT s8, AccumGetCounterPort
+	LOAD s8, ChanelAmount ;0x04
+	CALL StartUARTTransmission
+	TEST s0, 0x00	;clears the ZERO flag with no change to register contents
+	COMP s0, ChanelAllKey
+	JUMP Z, AccumGetCounterProc_1
+	IN s3, AccumGetCounterPort
+	CALL SendSymbolProc
+	JUMP EndDataTrans
 	
+	AccumGetCounterProc_1:
+		SUB s8, 0x01
+		IN s3, AccumGetCounterPort
+		CALL SendSymbolProc
+		JUMP NZ, AccumGetCounterProc_1	;not all data bytes was sent
+		JUMP EndDataTrans
 
 	                       
 ; ################################################################################################################
