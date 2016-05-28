@@ -27,11 +27,11 @@
 ; ****************************************************************************************************************
 ; *\navConst HistAccum - Navigator entry
 ; ****************************************************************************************************************
-        ChanelMax	0x05  ;max hist accum command types + 1
-        ChanelAmount	0x04  ;amount of channels we have + 1
-        ChanelAllKey	0x04	
-        HystLengthLSB   0x00	; amount of bits in hyst + 1 for bettet loop support
-        HystLengthMSB	0x0C
+        ChanelMax	EQU 0x05  ;max hist accum command types + 1
+        ChanelAmount	EQU 0x04  ;amount of channels we have + 1
+        ChanelAllKey	EQU 0x04	
+        HystLengthLSB   EQU 0x00	; amount of bits in hyst + 1 for bettet loop support
+        HystLengthMSB	EQU 0x0C
         
 ; ****************************************************************************************************************
 ; *\navConst SysComm - Navigator entry
@@ -114,8 +114,9 @@
 	
 	AccumClearPort		EQU 0xE3
 	AccumGetStatePort	EQU 0xE4
-	AccumRdIncPort	EQU 0xE5
+	AccumRdIncPort		EQU 0xE5
 	AccumGetDataPort	EQU 0xE6
+	AccumGetCounterPort	EQU 0xE7
 				
 							
    	EINT          
@@ -528,10 +529,13 @@ AccumClearProc:
 	FETCH	s0, 0x01
 	AND s0, 0xFF ;clears the carry flag with no change to register contents		
 	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
-	JUMP C, DataFormatErr
-	OUT s0, AccumClearPort
-	LOAD s3, OKReplyCode
+	JUMP NC, AccumClearProc_1
+	LOAD s3, DataFormatErr
 	JUMP UART_IRQ_Error
+	AccumClearProc_1:
+		OUT s0, AccumClearPort
+		LOAD s3, OKReplyCode
+		JUMP UART_IRQ_Error
 	
 AccumGetStateProc:
 	COMP	RecvCounter, 0x02
@@ -546,18 +550,22 @@ AccumGetDataProc:
 	FETCH	s0, 0x01
 	AND s0, 0xFF ;clears the carry flag with no change to register contents		
 	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
-	JUMP C, DataFormatErr
-	OUT s0, AccumGetDataPort
-	LOAD s0, HystLengthLSB
-	LOAD s8, HystLengthMSB
-	CALL StartUARTTransmission
+	JUMP NC, AccumGetDataProc_1
+	LOAD s3, DataFormatErr
+	JUMP UART_IRQ_Error
+
+	AccumGetDataProc_1:
+		OUT s0, AccumGetDataPort
+		LOAD s0, HystLengthLSB
+		LOAD s8, HystLengthMSB
+		CALL StartUARTTransmission
 	
-	AccumGetDataProc_1:		
+	AccumGetDataProc_2:		
 		SUB s8, 0x01
 		SUBC s0, 0x00
 		IN s3, AccumRdIncPort
 		CALL SendSymbolProc
-		JUMP NZ, AccumGetDataProc_1          ;not all data bytes was sent
+		JUMP NZ, AccumGetDataProc_2          ;not all data bytes was sent
 		JUMP EndDataTrans
 
 AccumGetCounterProc:
@@ -566,18 +574,22 @@ AccumGetCounterProc:
 	FETCH	s0, 0x01
 	AND s0, 0xFF	;clears the CARRY flag with no change to register contents		
 	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
-	JUMP C, DataFormatErr
-	OUT s8, AccumGetCounterPort
-	LOAD s8, ChanelAmount ;0x04
-	CALL StartUARTTransmission
-	TEST s0, 0x00	;clears the ZERO flag with no change to register contents
-	COMP s0, ChanelAllKey
-	JUMP Z, AccumGetCounterProc_1
-	IN s3, AccumGetCounterPort
-	CALL SendSymbolProc
-	JUMP EndDataTrans
+	JUMP NC, AccumGetCounterProc_1
+	LOAD s3, DataFormatErr
+	JUMP UART_IRQ_Error
 	
 	AccumGetCounterProc_1:
+		OUT s8, AccumGetCounterPort
+		LOAD s8, ChanelAmount ;0x04
+		CALL StartUARTTransmission
+		TEST s0, 0x00	;clears the ZERO flag with no change to register contents
+		COMP s0, ChanelAllKey
+		JUMP Z, AccumGetCounterProc_2
+		IN s3, AccumGetCounterPort
+		CALL SendSymbolProc
+		JUMP EndDataTrans
+	
+	AccumGetCounterProc_2:
 		SUB s8, 0x01
 		IN s3, AccumGetCounterPort
 		CALL SendSymbolProc
