@@ -28,6 +28,8 @@
 ; *\navConst HistAccum - Navigator entry
 ; ****************************************************************************************************************
         ChanelMax	0x05  ;max hist accum command types + 1
+        HystLengthLSB   0x00	; amount of bits in hyst + 1 for bettet loop support
+        HystLengthMSB	0x0C
         
 ; ****************************************************************************************************************
 ; *\navConst SysComm - Navigator entry
@@ -108,9 +110,10 @@
 	SPIRead			EQU 0xE1
 	SPISlaveSelect		EQU 0xE2	
 	
-	AccumClear		EQU 0xE3
+	AccumClearPort		EQU 0xE3
 	AccumGetStatePort	EQU 0xE4
-	
+	AccumRdIncPort	EQU 0xE5
+	AccumGetDataPort	EQU 0xE6
 				
 							
    	EINT          
@@ -255,6 +258,8 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 		jump	Z, AccumClearProc
 		comp	s0, AccumGetStateComm
 		jump	Z, AccumGetStateProc
+		comp	s0, AccumGetDataComm
+		jump	Z, AccumGetDataProc
 		LOAD	s3, CommAbsentErr             ;command not found
 UART_IRQ_Error:
 	LOAD s4, StartSymbol
@@ -520,7 +525,7 @@ AccumClearProc:
 	AND s0, 0xFF ;clears the carry flag with no change to register contents		
 	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
 	JUMP C, DataFormatErr
-	OUT s0, AccumClear
+	OUT s0, AccumClearPort
 	LOAD s3, OKReplyCode
 	JUMP UART_IRQ_Error
 	
@@ -530,6 +535,28 @@ AccumGetStateProc:
         IN s3, AccumGetStatePort ;we will get state information in single byte with 2 bit for chanel state 00-accumulate, 01-transmite 10-errase
         CALL SendSymbolProc
         JUMP EndDataTrans
+        
+AccumGetDataProc:
+	COMP	RecvCounter, 0x03
+	JUMP	NZ,UART_IRQ_Error
+	FETCH	s0, 0x01
+	AND s0, 0xFF ;clears the carry flag with no change to register contents		
+	COMP s0, ChanelMax ; check parameters in range [0x00 - 0x04]
+	JUMP C, DataFormatErr
+	OUT s0, AccumGetDataPort
+	LOAD s0, HystLengthLSB
+	LOAD s8, HystLengthMSB
+	CALL StartUARTTransmission
+	
+	AccumGetDataProc_1:		
+		SUB s8, 0x01
+		SUBC s0, 0x00
+		IN s3, AccumRdIncPort
+		CALL SendSymbolProc
+		JUMP NZ, AccumGetDataProc_1          ;not all data bytes was sent
+		JUMP EndDataTrans
+
+	
 
 	                       
 ; ################################################################################################################
