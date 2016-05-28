@@ -581,7 +581,7 @@ AccumGetCounterProc:
 		SUB s8, 0x01
 		IN s3, AccumGetCounterPort
 		CALL SendSymbolProc
-		JUMP NZ, AccumGetCounterProc_1	;not all data bytes was sent
+		JUMP NZ, AccumGetCounterProc_1	;not all data bytes were sent
 		JUMP EndDataTrans
 
 	                       
