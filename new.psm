@@ -49,7 +49,7 @@
 	AccumGetDataComm	EQU 0x15
 	AccumGetCounterComm	EQU 0x16
 	AccumClearComm	EQU 0x17 ;returns okCode, or error, sends command clear (0-3 specific channel, 4 - all channels)
-	AccumGetStateComm	EQU 0x18 ; returns state, or error, params: (0-3 specific channel, 4 - all channels)
+	AccumGetStateComm	EQU 0x18 ; returns state. no param required, 00-accum, 01-trnasmit 10-accum 
 ; ****************************************************************************************************************
 ; *\navConst SysErrors - Navigator entry
 ; ****************************************************************************************************************
@@ -109,6 +109,7 @@
 	SPISlaveSelect		EQU 0xE2	
 	
 	AccumClear		EQU 0xE3
+	AccumGetStatePort	EQU 0xE4
 	
 				
 							
@@ -252,6 +253,8 @@ UART_IRQ_Decode: ;recieved qty INPUT s1, data INPUT scratchpad 0..(s1)-1
 	 	jump	Z,ResetPointersProc
 		comp	s0, AccumClearComm
 		jump	Z, AccumClearProc
+		comp	s0, AccumGetStateComm
+		jump	Z, AccumGetStateProc
 		LOAD	s3, CommAbsentErr             ;command not found
 UART_IRQ_Error:
 	LOAD s4, StartSymbol
@@ -521,7 +524,13 @@ AccumClearProc:
 	LOAD s3, OKReplyCode
 	JUMP UART_IRQ_Error
 	
-	
+AccumGetStateProc:
+	COMP	RecvCounter, 0x02
+	JUMP	NZ,UART_IRQ_Error
+        IN s3, AccumGetStatePort ;we will get state information in single byte with 2 bit for chanel state 00-accumulate, 01-transmite 10-errase
+        CALL SendSymbolProc
+        JUMP EndDataTrans
+
 	                       
 ; ################################################################################################################
 ;*****************************************************************************************************************
